@@ -72,12 +72,10 @@ do
 java -jar /data/seqtools/Trimmomatic-0.33/trimmomatic-0.33.jar PE -threads 32 /data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/ATAC/source/${name}*R1*.fastq.gz /data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/ATAC/source/${name}*R2*.fastq.gz ./${name}/${name}_R1_paired.fastq.gz ./${name}/${name}_R1_unpaired.fastq.gz ./${name}/${name}_R2_paired.fastq.gz ./${name}/${name}_R2_unpaired.fastq.gz ILLUMINACLIP:/data/seqtools/Trimmomatic-0.33/adapters/NexteraPE-PE.fa:2:30:10 LEADING:5 TRAILING:5 SLIDINGWINDOW:4:12 MINLEN:30
 done
 
-
+ 
 #batch alignment
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-bowtie2 -p 32 -x /data/seqtools/genomes/hg19/hg19 -1 ./${name}/*R1_paired.fastq.gz -2 ./${name}/*R2_paired.fastq.gz | samtools view -u - | samtools sort - > ${name}_sorted.bam
-done
 bowtie2 -p 32 -x /data/seqtools/genomes/hg19/hg19 -1 ./${name}/*R1_paired.fastq.gz -2 ./${name}/*R2_paired.fastq.gz | samtools sort -O bam -@ 10 -o - > ${name}.bam
 done
 
@@ -94,31 +92,31 @@ do
 java -jar /data/seqtools/picard-tools-1.128/picard.jar MarkDuplicates I=${name}_sorted.bam O=${name}_sorted_duplicates.bam M=${name}_dups.txt REMOVE_DUPLICATES=true TMP_DIR=./picard_markdup_temp
 done
 
-
+#minimum mapping quality
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-samtools view -b  -q 10  ${name}_sorted_duplicates.bam  >  ${name}_sorted_duplicates_Non-specific.bam
+samtools view -b  -q 10  ${name}_sorted_duplicates.bam  >  ${name}_sorted_duplicates_Low-quality.bam
 done
 
 # Remove ChrM
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-bedtools intersect -v -b chrM.bed -abam ${name}_sorted_duplicates_Non-specific.bam > ${name}_sorted_duplicates_Non-specific_chrM.bam
+bedtools intersect -v -b chrM.bed -abam ${name}_sorted_duplicates_Low-quality.bam > ${name}_sorted_duplicates_Low-quality_chrM.bam
 done
 
 #Remove human blacklist (hg19.bed) peaks
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-bedtools intersect -abam ${name}_sorted_duplicates_Non-specific_chrM.bam -b hg19.bed -v > ${name}_sorted_duplicates_Non-specific_chrM_blacklisted.bam
+bedtools intersect -abam ${name}_sorted_duplicates_Low-quality_chrM.bam -b hg19.bed -v > ${name}_sorted_duplicates_Low-quality_chrM_blacklisted.bam
 done
 
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-macs2 callpeak  -t ${name}_sorted_duplicates_Non-specific_chrM_blacklisted.bam  -f BAMPE  -n ${name} -B -g hs
+macs2 callpeak  -t ${name}_sorted_duplicates_Low-quality_chrM_blacklisted.bam  -f BAMPE  -n ${name} -B -g hs
 done
 
 #bam to normalized bigwig
 for name in G910001 G910002 G910003 G910004 G910005 G910006 G910010 G910011 G910012 G910013 G910014 G910015
 do
-bamCoverage --bam ${name}_sorted_duplicates_Non-specific_chrM_blacklisted.bam -o ${name}_normalized.bigwig --normalizeUsing CPM -e -p max
+bamCoverage --bam ${name}_sorted_duplicates_Low-quality_chrM_blacklisted.bam -o ${name}_normalized.bigwig --normalizeUsing CPM -e -p max
 done
