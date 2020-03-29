@@ -1,0 +1,200 @@
+#########################################################################################
+#                                       PEO1                                            #
+#########################################################################################
+/data/newpython3/bin/multiBamSummary bins --bamfiles PEO1_Untreated_1.bam PEO1_Untreated_2.bam PEO1_Untreated_3.bam PEO1_treated_1.bam PEO1_treated_2.bam PEO1_treated_3.bam -o RNA_PEO1_PEO1
+/data/newpython3/bin/plotCorrelation -in RNA_PEO1_PEO1 --plotHeight 5.5 --plotWidth 7 --corMethod spearman --skipZeros --plotTitle "" --whatToPlot heatmap --labels PEO1_1 PEO1_2 PEO1_3 PEO1_treated_1 PEO1_treated_2 PEO1_treated_3 --colorMap RdYlBu --plotNumbers -o RNAseq_PEO1_PEO1_correlation.png
+
+#reads count
+library(Rsubread)
+library(DESeq2)
+setwd('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/')
+filenames <- c("PEO1_Untreated_1.bam","PEO1_Untreated_2.bam","PEO1_Untreated_3.bam","PEO1_treated_1.bam","PEO1_treated_2.bam","PEO1_treated_3.bam")
+fc_RNA_peo1 <- featureCounts(files= filenames,annot.ext="/data/yh4218/genomes/hg19/hg19.ensGene.gtf",isGTFAnnotationFile=TRUE,isPairedEnd=TRUE,nthread=32,countChimericFragments=FALSE)
+countdata_RNA_peo1<-fc_RNA_peo1$counts[,c(1,2,3,4,5,6)]
+write.table(countdata_RNA_peo1,file="counts_peo1.csv",sep = "\t",row.names = T)
+condition <- factor(c("PEO1_Untreated","PEO1_Untreated","PEO1_Untreated","PEO1_treated","PEO1_treated","PEO1_treated"))
+coldata <- data.frame(row.names=colnames(countdata_RNA_peo1), condition)
+dds <- DESeqDataSetFromMatrix(countData=countdata_RNA_peo1, colData=coldata, design=~condition)
+dds <- DESeq(dds) #normalization
+resdata_PEO1 <- results(dds,contrast=c("condition","PEO1_treated","PEO1_Untreated"))
+resdata_PEO1 <- na.omit(resdata_PEO1)
+resdata_PEO1 <- resdata_PEO1[which(resdata_PEO1$pvalue!=0 & resdata_PEO1$padj!=0),]
+names(resdata_PEO1)[0] <- "Gene"
+write.csv(resdata_PEO1, file="peo1_diffexpr_padj_results.csv",row.names = T)
+
+#annotation
+library('biomaRt')
+library(org.Hs.eg.db)
+library("curl")
+resdata_PEO1<-read.csv(file="/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/peo1_diffexpr_padj_results.csv")
+rownames(resdata_PEO1)<-resdata_PEO1[,1]
+resdata_PEO1[,1]<-NULL
+diff_PEO1 <- subset(resdata_PEO1,padj < 0.05)
+down_PEO1 <- subset(diff_PEO1,log2FoldChange < 0)
+up_PEO1 <- subset(diff_PEO1,log2FoldChange > 0)
+gene.df_PEO1<-bitr(rownames(diff_PEO1), fromType = "ENSEMBL", 
+              toType = c("SYMBOL","ENTREZID"),
+              OrgDb = org.Hs.eg.db)
+resdata_PEO1<-merge(resdata_PEO1,gene.df_PEO1,by.x=0,by.y=1,all.x=TRUE)
+
+
+#volcano
+library(ggplot2)
+library("ggrepel") #Avoid overlapping labels
+library(dplyr)
+library('EnhancedVolcano')
+keyvals <- rep('black', nrow(resdata_PEO1))
+names(keyvals) <- rep('Not Significant', nrow(resdata_PEO1))
+keyvals[which(resdata_PEO1$log2FoldChange > 0 & resdata_PEO1$padj<0.05)] <- 'red'
+names(keyvals)[which(resdata_PEO1$log2FoldChange > 0 & resdata_PEO1$padj<0.05)] <- 'up regulated'
+keyvals[which(resdata_PEO1$log2FoldChange < 0 & resdata_PEO1$padj<0.05)] <- 'green'
+names(keyvals)[which(resdata_PEO1$log2FoldChange < 0 & resdata_PEO1$padj<0.05)] <- 'down regulated'
+unique(names(keyvals))
+    
+head(resdata_PEO1[order(resdata_PEO1$log2FoldChange,decreasing=T), ])
+png("volcano_peo1_peo1_RNA_all.png",width=2000,height=3*600,res=72*3)
+EnhancedVolcano(resdata_PEO1,
+    lab = '',
+    x = 'log2FoldChange',
+    y = 'padj',
+    xlim = c(-3, 3),
+    colCustom = keyvals,
+    legend = c("Not Significant","Log2 FC","Padj","Padj & Log2 FC"),
+    legendLabels = c("Not Significant","Log2 FC","Padj","Padj & Log2 FC"),
+    caption = "Adjusted P-Value cutoff=0.05",
+    title = 'All SAG comparing PEO1 and HKMTi Treated PEO1 from RNA-seq',
+    titleLabSize=18,
+    subtitle='Volcano Plot',
+    pCutoff = 0.05,
+    pLabellingCutoff = 'pCutoff',
+    FCcutoff = 0,
+    pointSize = 1.0,
+    legendLabSize=20,
+    axisLabSize=20,
+    captionLabSize=20,
+    labSize = 5,
+   )
+dev.off()
+
+#full_heatmap
+write.table(resdata_PEO1, file="PEO1_annotated_resdata.csv",sep = "\t",row.names = T)
+annotated_resdata <- read.csv('PEO1_annotated_resdata.csv',header = T , sep = "\t")
+diff_gene <- subset(annotated_resdata,padj < 0.05)
+down_gene <- subset(resdata_PEO1,padj < 0.05 & log2FoldChange <= 0)
+up_gene <- subset(resdata_PEO1,padj < 0.05 & log2FoldChange >= 0)
+dim(down_gene)
+dim(up_gene)
+different<-merge(diff_gene,counts(dds, normalized = TRUE),by=0)
+rownames(different) <- different$Row.names
+different$Row.names <- NULL
+heatmap_data<-different[,c(7,8,9,10,11,12)]
+heatmap_data_matrix<-as.matrix(heatmap_data)
+library(pheatmap)
+colnames(heatmap_data_matrix)<-c( 'PEO1_1','PEO1_2','PEO1_3','PEO1_treated_1','PEO1_treated_2','PEO1_treated_3')
+pheatmap(heatmap_data_matrix,scale="row",cluster_col =T,cellwidth=50,width=8,cluster_row=T,main="Heatmap of SAG comparing PEO1 and HKMTi treated PEO1 from RNA-seq", fontsize=12,fontsize_col=20,show_rownames= F, clustering_distance_columns='Pearson', display_numbers =FALSE, filename="heatmap_full_PEO1_PEO1_RNA.jpg")
+
+
+
+#########################################################################################
+#                                       PEO4                                            #
+#########################################################################################
+/data/newpython3/bin/multiBamSummary bins --bamfiles PEO4_Untreated_1.bam PEO4_Untreated_2.bam PEO4_Untreated_3.bam PEO4_treated_1.bam PEO4_treated_2.bam PEO4_treated_3.bam -o RNA_PEO4_PEO4
+/data/newpython3/bin/plotCorrelation -in RNA_PEO4_PEO4 --plotHeight 5.5 --plotWidth 7 --corMethod spearman --skipZeros --plotTitle "" --whatToPlot heatmap --labels PEO4_1 PEO4_2 PEO4_3 PEO4_treated_1 PEO4_treated_2 PEO4_treated_3 --colorMap RdYlBu --plotNumbers -o RNAseq_PEO4_PEO4_correlation.png
+
+#reads count
+library(Rsubread)
+library(DESeq2)
+filenames <- c("PEO4_Untreated_1.bam","PEO4_Untreated_2.bam","PEO4_Untreated_3.bam","PEO4_treated_1.bam","PEO4_treated_2.bam","PEO4_treated_3.bam")
+fc_RNA_peo4 <- featureCounts(files= filenames,annot.ext="/data/yh4218/genomes/Homo_sapiens.GRCh37.87.gtf",isGTFAnnotationFile=TRUE,isPairedEnd=TRUE,nthread=32,countChimericFragments=FALSE)
+countdata_RNA_peo4<-fc_RNA_peo4$counts[,c(1,2,3,4,5,6)]
+write.table(countdata_RNA_peo4,file="counts_PEO4.csv",sep = "\t",row.names = T)
+condition <- factor(c( 'PEO4_Untreated','PEO4_Untreated','PEO4_Untreated','PEO4_treated','PEO4_treated','PEO4_treated'))
+coldata <- data.frame(row.names=colnames(countdata_RNA_peo4), condition)
+dds <- DESeqDataSetFromMatrix(countData=countdata_RNA_peo4, colData=coldata, design=~condition)
+dds <- DESeq(dds)
+resdata_PEO4 <- results(dds,contrast=c("condition","PEO4_treated","PEO4_Untreated"))
+resdata_PEO4 <- na.omit(resdata_PEO4)
+resdata_PEO4 <- resdata_PEO4[which(resdata_PEO4$pvalue!=0 & resdata_PEO4$padj!=0),]
+names(resdata_PEO4)[0] <- "Gene"
+write.csv(resdata_PEO4, file="peo4_diffexpr_padj_results.csv",row.names = T)
+
+#annotation
+library('biomaRt')
+library(org.Hs.eg.db)
+library("curl")
+
+resdata_PEO4<-read.csv(file="/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/peo4_diffexpr_padj_results.csv")
+rownames(resdata_PEO4)<-resdata_PEO4[,1]
+resdata_PEO4[,1]<-NULL
+subset(resdata_PEO4,padj < 0.05) -> diff_PEO4
+subset(diff_PEO4,log2FoldChange < 0) -> down_PEO4
+subset(diff_PEO4,log2FoldChange > 0) -> up_PEO4
+write.csv(rownames(diff_PEO4),'PEO4_PEO4_RNA_diff_gene.csv',row.names=F,col.names=F)
+gene.df_PEO4<-bitr(rownames(diff_PEO4), fromType = "ENSEMBL", 
+              toType = c("SYMBOL","ENTREZID"),
+              OrgDb = org.Hs.eg.db)
+resdata_PEO4<-merge(resdata_PEO4,gene.df_PEO4,by.x=0,by.y=1,all.x=TRUE)
+DNA_repair_genes<-read.csv('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/DNA_repair_genes.txt',header=FALSE)
+DNA_repair_gene_samples<-read.csv('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/DNA_repair_gene_samples.txt',header=FALSE)
+resdata_PEO4_filtered<-resdata_PEO4[which(resdata_PEO4$SYMBOL%in%DNA_repair_genes$V1),]
+
+
+#volcano
+library(ggplot2)
+library("ggrepel")
+library(dplyr)
+library('EnhancedVolcano')
+keyvals <- rep('black', nrow(resdata_PEO4))
+names(keyvals) <- rep('Not Significant', nrow(resdata_PEO4))
+keyvals[which(resdata_PEO4$log2FoldChange > 0 & resdata_PEO4$padj<0.05)] <- 'red'
+names(keyvals)[which(resdata_PEO4$log2FoldChange > 0 & resdata_PEO4$padj<0.05)] <- 'up regulated'
+keyvals[which(resdata_PEO4$log2FoldChange < 0 & resdata_PEO4$padj<0.05)] <- 'green'
+names(keyvals)[which(resdata_PEO4$log2FoldChange < 0 & resdata_PEO4$padj<0.05)] <- 'down regulated'
+unique(names(keyvals))
+head(resdata_PEO4[order(resdata_PEO4$log2FoldChange,decreasing=T), ])
+
+png("volcano_peo4_peo4_RNA_all.png",width=2000,height=1800,res=72*3)
+EnhancedVolcano(resdata_PEO4,
+    lab = resdata_PEO4$SYMBOL,
+    x = 'log2FoldChange',
+    y = 'padj',
+    selectLab= head(resdata_PEO4_filtered[order(resdata_PEO4_filtered$padj,decreasing=F),]$SYMBOL,n=10),
+    boxedLabels=TRUE,
+    drawConnectors = TRUE,
+    xlim = c(-3, 3),
+    colCustom = keyvals,
+    legend = c("Not Significant","Log2 FC","Padj","Padj & Log2 FC"),
+    legendLabels = c("Not Significant","Log2 FC","Padj","Padj & Log2 FC"),
+    caption = "Adjusted P-Value cutoff=0.05",
+    title = 'All SAG comparing PEO4 and HKMTi Treated PEO4 from RNA-seq',
+    titleLabSize=20,
+    subtitle='Volcano Plot',
+    pCutoff = 0.05,
+    pLabellingCutoff = 'pCutoff',
+    FCcutoff = 0,
+    pointSize = 1.0,
+    legendLabSize=20,
+    axisLabSize=20,
+    captionLabSize=20,
+    labSize = 5,
+   )
+dev.off()
+#full_heatmap
+write.table(resdata_PEO4, file="PEO4_annotated_resdata.csv",sep = "\t",row.names = T) 
+annotated_resdata <- read.csv('PEO4_annotated_resdata.csv',header = T , sep = "\t")
+subset(annotated_resdata,padj < 0.05) -> diff_gene
+subset(resdata_PEO4,padj < 0.05 & log2FoldChange <= 0) -> down_gene
+subset(resdata_PEO4,padj < 0.05 & log2FoldChange >= 0) -> up_gene
+dim(down_gene)
+dim(up_gene)
+
+different<-merge(diff_gene,counts(dds, normalized = TRUE),by=0)
+rownames(different) <- different$Row.names
+different$Row.names <- NULL
+heatmap_data<-different[,c(7,8,9,10,11,12)]
+heatmap_data_matrix<-as.matrix(heatmap_data)
+library(pheatmap)
+colnames(heatmap_data_matrix)<-c( 'PEO4_1','PEO4_2','PEO4_3','PEO4_treated_1','PEO4_treated_2','PEO4_treated_3')
+pheatmap(heatmap_data_matrix,scale="row",cluster_col =T,cellwidth=50,width=8,cluster_row=T,main="Heatmap of SAG comparing PEO4 and HKMTi treated PEO4 from RNA-seq", fontsize=12,fontsize_col=20,show_rownames= F, clustering_distance_columns='Pearson', display_numbers =FALSE, filename="heatmap_full_PEO4_PEO4_RNA.jpg")
+
+
