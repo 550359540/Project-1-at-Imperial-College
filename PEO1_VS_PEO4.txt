@@ -29,7 +29,7 @@ write.csv(resdata_PEO1_PEO4, file="PEO1_PEO4_diffexpr_padj_results.csv",row.name
 #Box plot
 library('tidyr')
 library('ggplot2')
-goi <- res$row
+goi <- resdata_PEO1_PEO4$row[1:6]
 tcounts <- t(log2((counts(dds[goi, ], normalized=TRUE, replaced=FALSE)+.5))) %>%
   merge(colData(dds), ., by="row.names") %>%
   gather(gene, expression, (ncol(.)-length(goi)+1):ncol(.))
@@ -189,7 +189,8 @@ library(ChIPpeakAnno)
 library(ChIPseeker)
 library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 library(EnsDb.Hsapiens.v75)
-diff_peak<-subset(resdata,padj < 0.05)
+#diff_peak<-subset(resdata,padj < 0.05)
+diff_peak<-resdata
 different<-merge(diff_peak,counts(dds, normalized = TRUE),by=0)
 rownames(different) <- different$Row.names
 different$Row.names <- NULL
@@ -228,9 +229,7 @@ overlaps.anno<-addGeneIDs(overlaps.anno,
 
                           IDs2Add="entrez_id")
 head(overlaps.anno)
-png('diff_peak_location.png')
-pie1(table(overlaps.anno$insideFeature))
-dev.off()
+
 overlaps.anno_df<-DataFrame(overlaps.anno)
 peak_to_gene<-overlaps.anno_df[,c(3,10)]
 #peak to symbol
@@ -246,9 +245,9 @@ library('EnhancedVolcano')
 keyvals <- rep('black', nrow(gene_name_with_logFC_pval))
 names(keyvals) <- rep('Not Significant', nrow(gene_name_with_logFC_pval))
 keyvals[which(gene_name_with_logFC_pval$log2FoldChange > 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'red'
-names(keyvals)[which(gene_name_with_logFC_pval$log2FoldChange > 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'up regulated'
+names(keyvals)[which(gene_name_with_logFC_pval$log2FoldChange > 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'More accessible'
 keyvals[which(gene_name_with_logFC_pval$log2FoldChange < 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'green'
-names(keyvals)[which(gene_name_with_logFC_pval$log2FoldChange < 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'down regulated'
+names(keyvals)[which(gene_name_with_logFC_pval$log2FoldChange < 0 & gene_name_with_logFC_pval$padj<0.05)] <- 'Less accessible'
 unique(names(keyvals))
 DNA_repair_gene_samples<-read.csv('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/DNA_repair_gene_samples.txt',header=FALSE)
 resdata_filtered<-gene_name_with_logFC_pval[which(gene_name_with_logFC_pval$gene_name%in%DNA_repair_gene_samples$V1),]

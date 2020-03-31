@@ -23,9 +23,8 @@ names(resdata_PEO1)[0] <- "Gene"
 write.csv(resdata_PEO1, file="peo1_diffexpr_padj_results.csv",row.names = T)
 
 #annotation
-library('biomaRt')
 library(org.Hs.eg.db)
-library("curl")
+library('clusterProfiler')
 resdata_PEO1<-read.csv(file="/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/peo1_diffexpr_padj_results.csv")
 rownames(resdata_PEO1)<-resdata_PEO1[,1]
 resdata_PEO1[,1]<-NULL
@@ -119,10 +118,8 @@ names(resdata_PEO4)[0] <- "Gene"
 write.csv(resdata_PEO4, file="peo4_diffexpr_padj_results.csv",row.names = T)
 
 #annotation
-library('biomaRt')
 library(org.Hs.eg.db)
-library("curl")
-
+library('clusterProfiler')
 resdata_PEO4<-read.csv(file="/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/peo4_diffexpr_padj_results.csv")
 rownames(resdata_PEO4)<-resdata_PEO4[,1]
 resdata_PEO4[,1]<-NULL
@@ -138,6 +135,27 @@ DNA_repair_genes<-read.csv('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_1
 DNA_repair_gene_samples<-read.csv('/data/yh4218/project1/TPU_PROJECT_G91_RUN928_04_09_19/DNA_repair_gene_samples.txt',header=FALSE)
 resdata_PEO4_filtered<-resdata_PEO4[which(resdata_PEO4$SYMBOL%in%DNA_repair_genes$V1),]
 
+#Box plot
+library('tidyr')
+library('ggplot2')
+goi <- rownames(resdata_PEO4[11650,])
+
+tcounts <- t(log2((counts(dds[goi, ], normalized=TRUE, replaced=FALSE)+.5))) %>%
+  merge(colData(dds), ., by="row.names") %>%
+  gather(gene, expression, (ncol(.)-length(goi)+1):ncol(.))
+tcounts[,2]<-as.character(tcounts[,2])
+tcounts[which(tcounts$condition=='PEO4_Untreated'),2]<-'PEO4'
+tcounts[which(tcounts$condition=='PEO4_treated'),2]<-'HKMTi Treated PEO4'
+tcounts[which(tcounts$gene=='ENSG00000149311'),4]<-'ATM'
+pdf('dr_gene_expression_box_PEO4_PEO4.pdf',width=7)
+ggplot(tcounts, aes(condition, expression,fill=condition)) + 
+  geom_boxplot() + 
+  scale_y_continuous(limits = c(0,12))+
+  facet_wrap(~gene, scales="free_y") + 
+  labs(x="PEO4 vs HKMTi Treated PEO4", 
+       y="Expression (log normalized counts)", 
+       title="Expression of ATM comparing PEO4 and HKMTi treated PEO4")
+dev.off()
 
 #volcano
 library(ggplot2)
@@ -167,7 +185,7 @@ EnhancedVolcano(resdata_PEO4,
     legendLabels = c("Not Significant","Log2 FC","Padj","Padj & Log2 FC"),
     caption = "Adjusted P-Value cutoff=0.05",
     title = 'All SAG comparing PEO4 and HKMTi Treated PEO4 from RNA-seq',
-    titleLabSize=20,
+    titleLabSize=18,
     subtitle='Volcano Plot',
     pCutoff = 0.05,
     pLabellingCutoff = 'pCutoff',
